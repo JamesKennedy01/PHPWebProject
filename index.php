@@ -1,66 +1,57 @@
 <?php
-require('./model/database.php');
-require('./model/product_db.php');
-require('./model/category_db.php');
+// Start session management with a persistent cookie
+$lifetime = 60 * 60 * 24 * 14;    // 2 weeks in seconds
+session_set_cookie_params($lifetime, '/');
+session_start();
 
-$sort = filter_input(INPUT_GET, 'sort');
-if ($sort == NULL) {
-    $sort = 'ID';
+// Create a cart array if needed
+if (empty($_SESSION['cart12'])) { $_SESSION['cart12'] = array(); }
+
+// Include cart functions
+require_once('../model/cart.php');
+
+// Get the action to perform
+$action = filter_input(INPUT_POST, 'action');
+if ($action === NULL) {
+    $action = filter_input(INPUT_GET, 'action');
+    if ($action === NULL) {
+        $action = 'show_add_item';
+    }
 }
 
-$action = filter_input(INPUT_POST, 'action');
-if ($action == NULL) {
-    $action = filter_input(INPUT_GET, 'action');
-    if ($action == NULL) {
-        $action = 'list_products';
-    }
-}  
-
-if ($action == 'list_products') {
-    $category_id = filter_input(INPUT_GET, 'category_id', 
-            FILTER_VALIDATE_INT);
-    if ($category_id == NULL || $category_id == FALSE) {
-        $category_id = 1;
-    }
-    $categories = get_categories();
-    $category_name = get_category_name($category_id);
-    if ($sort == 'ID') {
-        $products = get_products_by_category($category_id);
-    } else if ($sort == 'productName') {
-        $products = get_products_by_category_name($category_id);
-    } else if ($sort == 'listPrice') {
-        $products = get_products_by_category_price($category_id);
-    }
-    include('./product_catalog/product_list.php');
-} else if ($action == 'view_product') {
-    $product_id = filter_input(INPUT_GET, 'product_id', 
-            FILTER_VALIDATE_INT);   
-    if ($product_id == NULL || $product_id == FALSE) {
-        $error = 'Missing or incorrect product id.';
-        include('./errors/error.php');
-    } else {
-        $categories = get_categories();
-        $product = get_product($product_id);
-
-        // Get product data
-        $code = $product['productCode'];
-        $name = $product['productName'];
-        $list_price = $product['listPrice'];
-
-        // Calculate discounts
-        $discount_percent = 30;  // 30% off for all web orders
-        $discount_amount = round($list_price * ($discount_percent/100.0), 2);
-        $unit_price = $list_price - $discount_amount;
-
-        // Format the calculations
-        $discount_amount_f = number_format($discount_amount, 2);
-        $unit_price_f = number_format($unit_price, 2);
-
-        // Get image URL and alternate text
-        $image_filename = '../images/' . $code . '.png';
-        $image_alt = 'Image: ' . $code . '.png';
-
-        include('./product_catalog/product_view.php');
-    }
+// Add or update cart as needed
+switch($action) {
+    case 'add':
+        $product_key = filter_input(INPUT_POST, 'productkey');
+        $product_name = filter_input(INPUT_POST, 'name');
+        $item_qty = filter_input(INPUT_POST, 'itemqty');
+        $item_cost = filter_input(INPUT_POST, 'cost');
+        add_item($product_key, $product_name, $item_qty, $item_cost);
+        include('cart_view.php');
+        break;
+    case 'update':
+        $new_qty_list = filter_input(INPUT_POST, 'newqty', FILTER_DEFAULT, 
+                                     FILTER_REQUIRE_ARRAY);
+        foreach($new_qty_list as $key => $qty) {
+            if ($_SESSION['cart12'][$key]['qty'] != $qty) {
+                update_item($key, $qty);
+            }
+        }
+        include('cart_view.php');
+        break;
+    case 'show_cart':
+        include('cart_view.php');
+        break;
+    case 'show_add_item':
+        header('Location: ../');
+        exit();
+        break;
+    case 'empty_cart':
+        unset($_SESSION['cart12']);
+        include('cart_view.php');
+        break;
+    case 'checkout':
+        include('checkout.php');
+        break;
 }
 ?>
